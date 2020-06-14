@@ -12,6 +12,9 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.drawable.Icon;
+import android.media.Image;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -21,6 +24,10 @@ import androidx.palette.graphics.Palette;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
+import android.support.wearable.watchface.decomposition.ImageComponent;
+import android.support.wearable.watchface.decomposition.WatchFaceDecomposition;
+import android.support.wearable.watchface.decompositionface.DecompositionWatchFaceService;
+import android.util.DisplayMetrics;
 import android.view.SurfaceHolder;
 import android.widget.Toast;
 
@@ -41,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * in the Google Watch Face Code Lab:
  * https://codelabs.developers.google.com/codelabs/watchface/index.html#0
  */
-public class MyWatchFace extends CanvasWatchFaceService {
+public class MyWatchFace extends DecompositionWatchFaceService {
 
     /*
      * Updates rate in milliseconds for interactive mode. We update once a second to advance the
@@ -55,7 +62,179 @@ public class MyWatchFace extends CanvasWatchFaceService {
     private static final int MSG_UPDATE_TIME = 0;
 
     @Override
+    protected WatchFaceDecomposition buildDecomposition() {
+        DisplayMetrics dm = getApplication().getResources().getDisplayMetrics();
+        int ambientOffset = getApplicationContext().getResources()
+                .getDimensionPixelOffset(R.dimen.decomposed_ambient_offset);
+        int ambientWidth = dm.widthPixels - ambientOffset;
+        int ambientHeight = dm.heightPixels - ambientOffset;
+        float ambientCenterX = ambientWidth / 2f;
+        float ambientCenterY = ambientHeight / 2f;
+
+        // Background
+        Bitmap bgBitmap = Bitmap.createBitmap(ambientWidth, ambientHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bgBitmap);
+        canvas.drawColor(Color.BLACK);
+        {
+            Paint paint = new Paint(mTickAndCirclePaint);
+            paint.setAntiAlias(false);
+            paint.clearShadowLayer();
+
+            float innerTickRadius = ambientCenterX - 10;
+            float outerTickRadius = ambientCenterX;
+            for (int tickIndex = 0; tickIndex < 12; tickIndex++) {
+                float tickRot = (float) (tickIndex * Math.PI * 2 / 12);
+                float innerX = (float) Math.sin(tickRot) * innerTickRadius;
+                float innerY = (float) -Math.cos(tickRot) * innerTickRadius;
+                float outerX = (float) Math.sin(tickRot) * outerTickRadius;
+                float outerY = (float) -Math.cos(tickRot) * outerTickRadius;
+                canvas.drawLine(ambientCenterX + innerX, ambientCenterY + innerY,
+                        ambientCenterX + outerX, ambientCenterY + outerY, paint);
+            }
+
+        }
+        Icon bgIcon = Icon.createWithBitmap(bgBitmap);
+        ImageComponent bgComponent = new ImageComponent.Builder()
+                .setComponentId(0)
+                .setZOrder(0)
+                .setImage(bgIcon)
+                .build();
+
+        // Hour hand
+        int hourHeight = (int)(CENTER_GAP_AND_CIRCLE_RADIUS + sHourHandLength);
+        Bitmap hourBitmap = Bitmap.createBitmap(
+                (int)CENTER_GAP_AND_CIRCLE_RADIUS, hourHeight, Bitmap.Config.ARGB_8888);
+        canvas = new Canvas(hourBitmap);
+        {
+            Paint paint = new Paint(mHourPaint);
+            paint.setAntiAlias(false);
+            paint.clearShadowLayer();
+            canvas.drawLine(
+                    canvas.getWidth() / 2f,
+                    0f,
+                    canvas.getWidth() / 2f,
+                    canvas.getHeight(),
+                    paint);
+        }
+        float xOffset = (hourBitmap.getWidth() / 2f) / ambientWidth;
+        float yOffset = (float)hourBitmap.getHeight() / ambientHeight;
+        RectF offset = new RectF(
+                0.5f - xOffset,
+                0.5f - yOffset,
+                0.5f + xOffset,
+                0.5f + yOffset);
+        ImageComponent hourComponent = new ImageComponent.Builder(ImageComponent.Builder.HOUR_HAND)
+                .setComponentId(1)
+                .setZOrder(1)
+                .setImage(Icon.createWithBitmap(hourBitmap))
+                .setBounds(offset)
+                .build();
+
+        // Minute hand
+        int minuteHeight = (int)(CENTER_GAP_AND_CIRCLE_RADIUS + sMinuteHandLength);
+        Bitmap minuteBitmap = Bitmap.createBitmap(
+                (int)CENTER_GAP_AND_CIRCLE_RADIUS, minuteHeight, Bitmap.Config.ARGB_8888);
+        canvas = new Canvas(minuteBitmap);
+        {
+            Paint paint = new Paint(mMinutePaint);
+            paint.setAntiAlias(false);
+            paint.clearShadowLayer();
+            canvas.drawLine(
+                    canvas.getWidth() / 2f,
+                    0f,
+                    canvas.getWidth() / 2f,
+                    canvas.getHeight(),
+                    paint);
+        }
+        xOffset = (minuteBitmap.getWidth() / 2f) / ambientWidth;
+        yOffset = (float)minuteBitmap.getHeight() / ambientHeight;
+        offset = new RectF(
+                0.5f - xOffset,
+                0.5f - yOffset,
+                0.5f + xOffset,
+                0.5f + yOffset);
+        ImageComponent minuteComponent = new ImageComponent.Builder(
+                ImageComponent.Builder.MINUTE_HAND)
+                .setComponentId(2)
+                .setZOrder(2)
+                .setImage(Icon.createWithBitmap(minuteBitmap))
+                .setBounds(offset)
+                .build();
+
+        // Second hand
+        int secondHeight = (int)(CENTER_GAP_AND_CIRCLE_RADIUS + mSecondHandLength);
+        Bitmap secondBitmap = Bitmap.createBitmap(
+                (int)CENTER_GAP_AND_CIRCLE_RADIUS, secondHeight, Bitmap.Config.ARGB_8888);
+        canvas = new Canvas(secondBitmap);
+        {
+            Paint paint = new Paint(mSecondPaint);
+            paint.setAntiAlias(false);
+            paint.clearShadowLayer();
+            canvas.drawLine(
+                    canvas.getWidth() / 2f,
+                    0f,
+                    canvas.getWidth() / 2f,
+                    canvas.getHeight(),
+                    paint);
+        }
+        xOffset = (secondBitmap.getWidth() / 2f) / ambientWidth;
+        yOffset = (float)secondBitmap.getHeight() / ambientHeight;
+        offset = new RectF(
+                0.5f - xOffset,
+                0.5f - yOffset,
+                0.5f + xOffset,
+                0.5f + yOffset);
+        ImageComponent secondComponent = new ImageComponent.Builder(ImageComponent.Builder.TICKING_SECOND_HAND)
+                .setComponentId(3)
+                .setZOrder(3)
+                .setImage(Icon.createWithBitmap(secondBitmap))
+                .setBounds(offset)
+                .build();
+
+        // Center circle
+        Bitmap circleBitmap = Bitmap.createBitmap(
+                (int)CENTER_GAP_AND_CIRCLE_RADIUS * 4,
+                (int)CENTER_GAP_AND_CIRCLE_RADIUS * 4,
+                Bitmap.Config.ARGB_8888);
+        canvas = new Canvas(circleBitmap);
+        {
+            Paint paint = new Paint(mTickAndCirclePaint);
+            paint.setAntiAlias(false);
+            paint.clearShadowLayer();
+            Paint innerPaint = new Paint(paint);
+            innerPaint.setColor(Color.BLACK);
+            innerPaint.setStyle(Paint.Style.FILL);
+            canvas.translate(canvas.getWidth() / 2f, canvas.getHeight() / 2f);
+            canvas.drawCircle(0, 0, CENTER_GAP_AND_CIRCLE_RADIUS, innerPaint);
+            canvas.drawCircle(0, 0, CENTER_GAP_AND_CIRCLE_RADIUS, paint);
+        }
+        xOffset = circleBitmap.getWidth() / (ambientWidth * 2f);
+        yOffset = circleBitmap.getHeight() / (ambientHeight * 2f);
+        offset = new RectF(
+                0.5f - xOffset,
+                0.5f - yOffset,
+                0.5f + xOffset,
+                0.5f + yOffset);
+        ImageComponent circleComponent = new ImageComponent.Builder()
+                .setComponentId(4)
+                .setZOrder(4)
+                .setImage(Icon.createWithBitmap(circleBitmap))
+                .setBounds(offset)
+                .build();
+
+        return new WatchFaceDecomposition.Builder().addImageComponents(
+                bgComponent, hourComponent, minuteComponent, secondComponent, circleComponent)
+                .build();
+    }
+
+    @Override
     public Engine onCreateEngine() {
+        mCalendar = Calendar.getInstance();
+
+        initializeWatchFace();
+        initializeBackground();
+        updateWatchHandStyle();
+
         return new Engine();
     }
 
@@ -79,17 +258,150 @@ public class MyWatchFace extends CanvasWatchFaceService {
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
-        private static final float HOUR_STROKE_WIDTH = 5f;
-        private static final float MINUTE_STROKE_WIDTH = 3f;
-        private static final float SECOND_TICK_STROKE_WIDTH = 2f;
+    private void initializeBackground() {
+        mBackgroundPaint = new Paint();
+        mBackgroundPaint.setColor(Color.BLACK);
+        mBackgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
 
-        private static final float CENTER_GAP_AND_CIRCLE_RADIUS = 4f;
+        /* Extracts colors from background image to improve watchface style. */
+        Palette.from(mBackgroundBitmap).generate(new Palette.PaletteAsyncListener() {
+            @Override
+            public void onGenerated(Palette palette) {
+                if (palette != null) {
+                    mWatchHandHighlightColor = palette.getVibrantColor(Color.RED);
+                    mWatchHandColor = palette.getLightVibrantColor(Color.WHITE);
+                    mWatchHandShadowColor = palette.getDarkMutedColor(Color.BLACK);
+                    updateWatchHandStyle();
+                }
+            }
+        });
+    }
 
-        private static final int SHADOW_RADIUS = 6;
+    private void initializeWatchFace() {
+        /* Set defaults for colors */
+        mWatchHandColor = Color.WHITE;
+        mWatchHandHighlightColor = Color.RED;
+        mWatchHandShadowColor = Color.BLACK;
+
+        mHourPaint = new Paint();
+        mHourPaint.setColor(mWatchHandColor);
+        mHourPaint.setStrokeWidth(HOUR_STROKE_WIDTH);
+        mHourPaint.setAntiAlias(true);
+        mHourPaint.setStrokeCap(Paint.Cap.ROUND);
+        mHourPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+
+        mMinutePaint = new Paint();
+        mMinutePaint.setColor(mWatchHandColor);
+        mMinutePaint.setStrokeWidth(MINUTE_STROKE_WIDTH);
+        mMinutePaint.setAntiAlias(true);
+        mMinutePaint.setStrokeCap(Paint.Cap.ROUND);
+        mMinutePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+
+        mSecondPaint = new Paint();
+        mSecondPaint.setColor(mWatchHandHighlightColor);
+        mSecondPaint.setStrokeWidth(SECOND_TICK_STROKE_WIDTH);
+        mSecondPaint.setAntiAlias(true);
+        mSecondPaint.setStrokeCap(Paint.Cap.ROUND);
+        mSecondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+
+        mTickAndCirclePaint = new Paint();
+        mTickAndCirclePaint.setColor(mWatchHandColor);
+        mTickAndCirclePaint.setStrokeWidth(SECOND_TICK_STROKE_WIDTH);
+        mTickAndCirclePaint.setAntiAlias(true);
+        mTickAndCirclePaint.setStyle(Paint.Style.STROKE);
+        mTickAndCirclePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+
+        DisplayMetrics dm = getApplication().getResources().getDisplayMetrics();
+
+        /*
+         * Find the coordinates of the center point on the screen, and ignore the window
+         * insets, so that, on round watches with a "chin", the watch face is centered on the
+         * entire screen, not just the usable portion.
+         */
+        mCenterX = dm.widthPixels / 2f;
+        mCenterY = dm.heightPixels / 2f;
+
+        /*
+         * Calculate lengths of different hands based on watch screen size.
+         */
+        mSecondHandLength = (float) (mCenterX * 0.875);
+        sMinuteHandLength = (float) (mCenterX * 0.75);
+        sHourHandLength = (float) (mCenterX * 0.5);
+
+    }
+
+    private void updateWatchHandStyle() {
+        if (mAmbient) {
+            mHourPaint.setColor(Color.WHITE);
+            mMinutePaint.setColor(Color.WHITE);
+            mSecondPaint.setColor(Color.WHITE);
+            mTickAndCirclePaint.setColor(Color.WHITE);
+
+            mHourPaint.setAntiAlias(false);
+            mMinutePaint.setAntiAlias(false);
+            mSecondPaint.setAntiAlias(false);
+            mTickAndCirclePaint.setAntiAlias(false);
+
+            mHourPaint.clearShadowLayer();
+            mMinutePaint.clearShadowLayer();
+            mSecondPaint.clearShadowLayer();
+            mTickAndCirclePaint.clearShadowLayer();
+
+        } else {
+            mHourPaint.setColor(mWatchHandColor);
+            mMinutePaint.setColor(mWatchHandColor);
+            mSecondPaint.setColor(mWatchHandHighlightColor);
+            mTickAndCirclePaint.setColor(mWatchHandColor);
+
+            mHourPaint.setAntiAlias(true);
+            mMinutePaint.setAntiAlias(true);
+            mSecondPaint.setAntiAlias(true);
+            mTickAndCirclePaint.setAntiAlias(true);
+
+            mHourPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+            mMinutePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+            mSecondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+            mTickAndCirclePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+        }
+    }
+
+
+    private static final float HOUR_STROKE_WIDTH = 5f;
+    private static final float MINUTE_STROKE_WIDTH = 3f;
+    private static final float SECOND_TICK_STROKE_WIDTH = 2f;
+
+    private static final float CENTER_GAP_AND_CIRCLE_RADIUS = 4f;
+
+    private static final int SHADOW_RADIUS = 6;
+
+    private Calendar mCalendar;
+    private boolean mRegisteredTimeZoneReceiver = false;
+    private boolean mMuteMode;
+    private float mCenterX;
+    private float mCenterY;
+    private float mSecondHandLength;
+    private float sMinuteHandLength;
+    private float sHourHandLength;
+    /* Colors for all hands (hour, minute, seconds, ticks) based on photo loaded. */
+    private int mWatchHandColor;
+    private int mWatchHandHighlightColor;
+    private int mWatchHandShadowColor;
+    private Paint mHourPaint;
+    private Paint mMinutePaint;
+    private Paint mSecondPaint;
+    private Paint mTickAndCirclePaint;
+    private Paint mBackgroundPaint;
+    private Bitmap mBackgroundBitmap;
+    private Bitmap mGrayBackgroundBitmap;
+    private boolean mAmbient;
+    private boolean mLowBitAmbient;
+    private boolean mBurnInProtection;
+
+
+    private class Engine extends DecompositionWatchFaceService.Engine {
         /* Handler to update the time once a second in interactive mode. */
         private final Handler mUpdateTimeHandler = new EngineHandler(this);
-        private Calendar mCalendar;
+
         private final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -97,27 +409,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
                 invalidate();
             }
         };
-        private boolean mRegisteredTimeZoneReceiver = false;
-        private boolean mMuteMode;
-        private float mCenterX;
-        private float mCenterY;
-        private float mSecondHandLength;
-        private float sMinuteHandLength;
-        private float sHourHandLength;
-        /* Colors for all hands (hour, minute, seconds, ticks) based on photo loaded. */
-        private int mWatchHandColor;
-        private int mWatchHandHighlightColor;
-        private int mWatchHandShadowColor;
-        private Paint mHourPaint;
-        private Paint mMinutePaint;
-        private Paint mSecondPaint;
-        private Paint mTickAndCirclePaint;
-        private Paint mBackgroundPaint;
-        private Bitmap mBackgroundBitmap;
-        private Bitmap mGrayBackgroundBitmap;
-        private boolean mAmbient;
-        private boolean mLowBitAmbient;
-        private boolean mBurnInProtection;
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -127,64 +418,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
                     .setAcceptsTapEvents(true)
                     .build());
 
-            mCalendar = Calendar.getInstance();
-
-            initializeBackground();
-            initializeWatchFace();
-        }
-
-        private void initializeBackground() {
-            mBackgroundPaint = new Paint();
-            mBackgroundPaint.setColor(Color.BLACK);
-            mBackgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
-
-            /* Extracts colors from background image to improve watchface style. */
-            Palette.from(mBackgroundBitmap).generate(new Palette.PaletteAsyncListener() {
-                @Override
-                public void onGenerated(Palette palette) {
-                    if (palette != null) {
-                        mWatchHandHighlightColor = palette.getVibrantColor(Color.RED);
-                        mWatchHandColor = palette.getLightVibrantColor(Color.WHITE);
-                        mWatchHandShadowColor = palette.getDarkMutedColor(Color.BLACK);
-                        updateWatchHandStyle();
-                    }
-                }
-            });
-        }
-
-        private void initializeWatchFace() {
-            /* Set defaults for colors */
-            mWatchHandColor = Color.WHITE;
-            mWatchHandHighlightColor = Color.RED;
-            mWatchHandShadowColor = Color.BLACK;
-
-            mHourPaint = new Paint();
-            mHourPaint.setColor(mWatchHandColor);
-            mHourPaint.setStrokeWidth(HOUR_STROKE_WIDTH);
-            mHourPaint.setAntiAlias(true);
-            mHourPaint.setStrokeCap(Paint.Cap.ROUND);
-            mHourPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-
-            mMinutePaint = new Paint();
-            mMinutePaint.setColor(mWatchHandColor);
-            mMinutePaint.setStrokeWidth(MINUTE_STROKE_WIDTH);
-            mMinutePaint.setAntiAlias(true);
-            mMinutePaint.setStrokeCap(Paint.Cap.ROUND);
-            mMinutePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-
-            mSecondPaint = new Paint();
-            mSecondPaint.setColor(mWatchHandHighlightColor);
-            mSecondPaint.setStrokeWidth(SECOND_TICK_STROKE_WIDTH);
-            mSecondPaint.setAntiAlias(true);
-            mSecondPaint.setStrokeCap(Paint.Cap.ROUND);
-            mSecondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-
-            mTickAndCirclePaint = new Paint();
-            mTickAndCirclePaint.setColor(mWatchHandColor);
-            mTickAndCirclePaint.setStrokeWidth(SECOND_TICK_STROKE_WIDTH);
-            mTickAndCirclePaint.setAntiAlias(true);
-            mTickAndCirclePaint.setStyle(Paint.Style.STROKE);
-            mTickAndCirclePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
         }
 
         @Override
@@ -217,41 +450,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
             updateTimer();
         }
 
-        private void updateWatchHandStyle() {
-            if (mAmbient) {
-                mHourPaint.setColor(Color.WHITE);
-                mMinutePaint.setColor(Color.WHITE);
-                mSecondPaint.setColor(Color.WHITE);
-                mTickAndCirclePaint.setColor(Color.WHITE);
-
-                mHourPaint.setAntiAlias(false);
-                mMinutePaint.setAntiAlias(false);
-                mSecondPaint.setAntiAlias(false);
-                mTickAndCirclePaint.setAntiAlias(false);
-
-                mHourPaint.clearShadowLayer();
-                mMinutePaint.clearShadowLayer();
-                mSecondPaint.clearShadowLayer();
-                mTickAndCirclePaint.clearShadowLayer();
-
-            } else {
-                mHourPaint.setColor(mWatchHandColor);
-                mMinutePaint.setColor(mWatchHandColor);
-                mSecondPaint.setColor(mWatchHandHighlightColor);
-                mTickAndCirclePaint.setColor(mWatchHandColor);
-
-                mHourPaint.setAntiAlias(true);
-                mMinutePaint.setAntiAlias(true);
-                mSecondPaint.setAntiAlias(true);
-                mTickAndCirclePaint.setAntiAlias(true);
-
-                mHourPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-                mMinutePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-                mSecondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-                mTickAndCirclePaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
-            }
-        }
-
         @Override
         public void onInterruptionFilterChanged(int interruptionFilter) {
             super.onInterruptionFilterChanged(interruptionFilter);
@@ -270,22 +468,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
         @Override
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             super.onSurfaceChanged(holder, format, width, height);
-
-            /*
-             * Find the coordinates of the center point on the screen, and ignore the window
-             * insets, so that, on round watches with a "chin", the watch face is centered on the
-             * entire screen, not just the usable portion.
-             */
-            mCenterX = width / 2f;
-            mCenterY = height / 2f;
-
-            /*
-             * Calculate lengths of different hands based on watch screen size.
-             */
-            mSecondHandLength = (float) (mCenterX * 0.875);
-            sMinuteHandLength = (float) (mCenterX * 0.75);
-            sHourHandLength = (float) (mCenterX * 0.5);
-
 
             /* Scale loaded background image (more efficient) if surface dimensions change. */
             float scale = ((float) width) / (float) mBackgroundBitmap.getWidth();
