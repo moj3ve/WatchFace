@@ -27,6 +27,7 @@ import android.support.wearable.complications.rendering.ComplicationDrawable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
+import android.support.wearable.watchface.decomposition.ComplicationComponent;
 import android.support.wearable.watchface.decomposition.ImageComponent;
 import android.support.wearable.watchface.decomposition.WatchFaceDecomposition;
 import android.support.wearable.watchface.decompositionface.DecompositionWatchFaceService;
@@ -289,8 +290,31 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setBounds(offset)
                 .build();
 
+        // Complication
+        xOffset = circleBitmap.getWidth() / (ambientWidth * 2f);
+        yOffset = circleBitmap.getHeight() / (ambientHeight * 2f);
+        offset = new RectF(
+                mLeftComplicationBounds.left / (float)(ambientWidth - ambientOffset),
+                mLeftComplicationBounds.top / (float)(ambientHeight - ambientOffset),
+                mLeftComplicationBounds.right / (float)(ambientWidth - ambientOffset),
+                mLeftComplicationBounds.bottom / (float)(ambientHeight - ambientOffset));
+        ComplicationComponent cc = new ComplicationComponent.Builder()
+                .setWatchFaceComplicationId(LEFT_COMPLICATION_ID)
+                .setComplicationDrawable(mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID))
+                .setComponentId(5)
+                .setZOrder(1)
+                .setDisplayModes(WatchFaceDecomposition.Component.DISPLAY_AMBIENT)
+                .setComplicationTypes(COMPLICATION_SUPPORTED_TYPES[0])
+                .setBounds(offset /*new RectF(mLeftComplicationBounds)*/)
+                .build();
+
+        System.out.println("mLeftComplicationBounds: " + mLeftComplicationBounds);
+        System.out.println("offset: " + offset);
+
+
         return new WatchFaceDecomposition.Builder().addImageComponents(
                 bgComponent, hourComponent, minuteComponent, secondComponent, circleComponent)
+                .addComplicationComponents(cc)
                 .build();
     }
 
@@ -347,9 +371,6 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         ComplicationDrawable rightComplicationDrawable =
                 new ComplicationDrawable(getApplicationContext());
 
-        ComplicationDrawable backgroundComplicationDrawable =
-                new ComplicationDrawable(getApplicationContext());
-
         // Adds new complications to a SparseArray to simplify setting styles and ambient
         // properties for all complications, i.e., iterate over them all.
         mComplicationDrawableSparseArray = new SparseArray<>(COMPLICATION_IDS.length);
@@ -372,19 +393,17 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         int complicationId;
         ComplicationDrawable complicationDrawable;
 
-        for (int i = 0; i < COMPLICATION_IDS.length; i++) {
-            complicationId = COMPLICATION_IDS[i];
+        for (int id : COMPLICATION_IDS) {
+            complicationId = id;
             complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
 
-            {
-                // Active mode colors.
-                complicationDrawable.setBorderColorActive(primaryComplicationColor);
-                complicationDrawable.setRangedValuePrimaryColorActive(primaryComplicationColor);
+            // Active mode colors.
+            complicationDrawable.setBorderColorActive(primaryComplicationColor);
+            complicationDrawable.setRangedValuePrimaryColorActive(primaryComplicationColor);
 
-                // Ambient mode colors.
-                complicationDrawable.setBorderColorAmbient(Color.WHITE);
-                complicationDrawable.setRangedValuePrimaryColorAmbient(Color.WHITE);
-            }
+            // Ambient mode colors.
+            complicationDrawable.setBorderColorAmbient(Color.RED);
+            complicationDrawable.setRangedValuePrimaryColorAmbient(Color.RED);
         }
     }
 
@@ -474,7 +493,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         int horizontalOffset = (midpointOfScreen - sizeOfComplication) / 2;
         int verticalOffset = midpointOfScreen - (sizeOfComplication / 2);
 
-        Rect leftBounds =
+        mLeftComplicationBounds =
                 // Left, Top, Right, Bottom
                 new Rect(
                         horizontalOffset,
@@ -484,9 +503,9 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         ComplicationDrawable leftComplicationDrawable =
                 mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID);
-        leftComplicationDrawable.setBounds(leftBounds);
+        leftComplicationDrawable.setBounds(mLeftComplicationBounds);
 
-        Rect rightBounds =
+        mRightComplicationBounds =
                 // Left, Top, Right, Bottom
                 new Rect(
                         (midpointOfScreen + horizontalOffset),
@@ -496,7 +515,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         ComplicationDrawable rightComplicationDrawable =
                 mComplicationDrawableSparseArray.get(RIGHT_COMPLICATION_ID);
-        rightComplicationDrawable.setBounds(rightBounds);
+        rightComplicationDrawable.setBounds(mRightComplicationBounds);
     }
 
     private void updateWatchHandStyle() {
@@ -565,6 +584,9 @@ public class MyWatchFace extends DecompositionWatchFaceService {
     private boolean mAmbient;
     private boolean mLowBitAmbient;
     private boolean mBurnInProtection;
+
+    private Rect mLeftComplicationBounds;
+    private Rect mRightComplicationBounds;
 
 
     /* Maps active complication ids to the data for that complication. Note: Data will only be
@@ -871,6 +893,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         @Override
         public void onVisibilityChanged(boolean visible) {
             super.onVisibilityChanged(visible);
+            System.out.println("onVisibilityChanged: " + visible);
 
             if (visible) {
                 setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
