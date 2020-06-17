@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -21,6 +22,8 @@ import android.os.Message;
 
 import androidx.palette.graphics.Palette;
 
+import android.support.wearable.complications.ComplicationData;
+import android.support.wearable.complications.rendering.ComplicationDrawable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
@@ -28,6 +31,7 @@ import android.support.wearable.watchface.decomposition.ImageComponent;
 import android.support.wearable.watchface.decomposition.WatchFaceDecomposition;
 import android.support.wearable.watchface.decompositionface.DecompositionWatchFaceService;
 import android.util.DisplayMetrics;
+import android.util.SparseArray;
 import android.view.SurfaceHolder;
 import android.widget.Toast;
 
@@ -60,6 +64,68 @@ public class MyWatchFace extends DecompositionWatchFaceService {
      * Handler message id for updating the time periodically in interactive mode.
      */
     private static final int MSG_UPDATE_TIME = 0;
+
+    // Unique IDs for each complication. The settings activity that supports allowing users
+    // to select their complication data provider requires numbers to be >= 0.
+    private static final int LEFT_COMPLICATION_ID = 100;
+    private static final int RIGHT_COMPLICATION_ID = 101;
+
+    // Background, Left and right complication IDs as array for Complication API.
+    private static final int[] COMPLICATION_IDS = {LEFT_COMPLICATION_ID, RIGHT_COMPLICATION_ID};
+
+    // Left and right dial supported types.
+    private static final int[][] COMPLICATION_SUPPORTED_TYPES = {
+            {
+                    ComplicationData.TYPE_RANGED_VALUE,
+                    ComplicationData.TYPE_ICON,
+                    ComplicationData.TYPE_SHORT_TEXT,
+                    ComplicationData.TYPE_SMALL_IMAGE,
+                    ComplicationData.TYPE_LONG_TEXT
+            },
+            {
+                    ComplicationData.TYPE_RANGED_VALUE,
+                    ComplicationData.TYPE_ICON,
+                    ComplicationData.TYPE_SHORT_TEXT,
+                    ComplicationData.TYPE_SMALL_IMAGE,
+                    ComplicationData.TYPE_LONG_TEXT
+            }
+    };
+
+    // Used by {@link AnalogComplicationConfigRecyclerViewAdapter} to check if complication location
+    // is supported in settings config activity.
+    public static int getComplicationId(
+            AnalogComplicationConfigRecyclerViewAdapter.ComplicationLocation complicationLocation) {
+        // Add any other supported locations here.
+        switch (complicationLocation) {
+            case LEFT:
+                return LEFT_COMPLICATION_ID;
+            case RIGHT:
+                return RIGHT_COMPLICATION_ID;
+            default:
+                return -1;
+        }
+    }
+
+
+    // Used by {@link AnalogComplicationConfigRecyclerViewAdapter} to see which complication types
+    // are supported in the settings config activity.
+    public static int[] getSupportedComplicationTypes(
+            AnalogComplicationConfigRecyclerViewAdapter.ComplicationLocation complicationLocation) {
+        // Add any other supported locations here.
+        switch (complicationLocation) {
+            case LEFT:
+                return COMPLICATION_SUPPORTED_TYPES[0];
+            case RIGHT:
+                return COMPLICATION_SUPPORTED_TYPES[1];
+            default:
+                return new int[] {};
+        }
+    }
+
+    // Used by {@link AnalogComplicationConfigRecyclerViewAdapter} to retrieve all complication ids.
+    public static int[] getComplicationIds() {
+        return COMPLICATION_IDS;
+    }
 
     @Override
     protected WatchFaceDecomposition buildDecomposition() {
@@ -184,7 +250,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 0.5f - yOffset,
                 0.5f + xOffset,
                 0.5f + yOffset);
-        ImageComponent secondComponent = new ImageComponent.Builder(ImageComponent.Builder.TICKING_SECOND_HAND)
+        ImageComponent secondComponent = new ImageComponent.Builder(
+                ImageComponent.Builder.TICKING_SECOND_HAND)
                 .setComponentId(3)
                 .setZOrder(3)
                 .setImage(Icon.createWithBitmap(secondBitmap))
@@ -231,6 +298,16 @@ public class MyWatchFace extends DecompositionWatchFaceService {
     public Engine onCreateEngine() {
         mCalendar = Calendar.getInstance();
 
+        // Used throughout watch face to pull user's preferences.
+        Context context = getApplicationContext();
+        mSharedPref =
+                context.getSharedPreferences(
+                        getString(R.string.analog_complication_preference_file_key),
+                        Context.MODE_PRIVATE);
+
+        mCalendar = Calendar.getInstance();
+
+        initializeComplicationsAndBackground();
         initializeWatchFace();
         initializeBackground();
         updateWatchHandStyle();
@@ -254,6 +331,59 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                         engine.handleUpdateTimeMessage();
                         break;
                 }
+            }
+        }
+    }
+
+    private void initializeComplicationsAndBackground() {
+        mActiveComplicationDataSparseArray = new SparseArray<>(COMPLICATION_IDS.length);
+
+        // Creates a ComplicationDrawable for each location where the user can render a
+        // complication on the watch face. In this watch face, we create one for left, right,
+        // and background, but you could add many more.
+        ComplicationDrawable leftComplicationDrawable =
+                new ComplicationDrawable(getApplicationContext());
+
+        ComplicationDrawable rightComplicationDrawable =
+                new ComplicationDrawable(getApplicationContext());
+
+        ComplicationDrawable backgroundComplicationDrawable =
+                new ComplicationDrawable(getApplicationContext());
+
+        // Adds new complications to a SparseArray to simplify setting styles and ambient
+        // properties for all complications, i.e., iterate over them all.
+        mComplicationDrawableSparseArray = new SparseArray<>(COMPLICATION_IDS.length);
+
+        mComplicationDrawableSparseArray.put(LEFT_COMPLICATION_ID, leftComplicationDrawable);
+        mComplicationDrawableSparseArray.put(RIGHT_COMPLICATION_ID, rightComplicationDrawable);
+
+        setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
+    }
+
+
+    /* Sets active/ambient mode colors for all complications.
+     *
+     * Note: With the rest of the watch face, we update the paint colors based on
+     * ambient/active mode callbacks, but because the ComplicationDrawable handles
+     * the active/ambient colors, we only set the colors twice. Once at initialization and
+     * again if the user changes the highlight color via AnalogComplicationConfigActivity.
+     */
+    private void setComplicationsActiveAndAmbientColors(int primaryComplicationColor) {
+        int complicationId;
+        ComplicationDrawable complicationDrawable;
+
+        for (int i = 0; i < COMPLICATION_IDS.length; i++) {
+            complicationId = COMPLICATION_IDS[i];
+            complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
+
+            {
+                // Active mode colors.
+                complicationDrawable.setBorderColorActive(primaryComplicationColor);
+                complicationDrawable.setRangedValuePrimaryColorActive(primaryComplicationColor);
+
+                // Ambient mode colors.
+                complicationDrawable.setBorderColorAmbient(Color.WHITE);
+                complicationDrawable.setRangedValuePrimaryColorAmbient(Color.WHITE);
             }
         }
     }
@@ -328,6 +458,45 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         sMinuteHandLength = (float) (mCenterX * 0.75);
         sHourHandLength = (float) (mCenterX * 0.5);
 
+        /*
+         * Calculates location bounds for right and left circular complications. Please note,
+         * we are not demonstrating a long text complication in this watch face.
+         *
+         * We suggest using at least 1/4 of the screen width for circular (or squared)
+         * complications and 2/3 of the screen width for wide rectangular complications for
+         * better readability.
+         */
+
+        // For most Wear devices, width and height are the same, so we just chose one (width).
+        int sizeOfComplication = dm.widthPixels / 4;
+        int midpointOfScreen = dm.widthPixels / 2;
+
+        int horizontalOffset = (midpointOfScreen - sizeOfComplication) / 2;
+        int verticalOffset = midpointOfScreen - (sizeOfComplication / 2);
+
+        Rect leftBounds =
+                // Left, Top, Right, Bottom
+                new Rect(
+                        horizontalOffset,
+                        verticalOffset,
+                        (horizontalOffset + sizeOfComplication),
+                        (verticalOffset + sizeOfComplication));
+
+        ComplicationDrawable leftComplicationDrawable =
+                mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID);
+        leftComplicationDrawable.setBounds(leftBounds);
+
+        Rect rightBounds =
+                // Left, Top, Right, Bottom
+                new Rect(
+                        (midpointOfScreen + horizontalOffset),
+                        verticalOffset,
+                        (midpointOfScreen + horizontalOffset + sizeOfComplication),
+                        (verticalOffset + sizeOfComplication));
+
+        ComplicationDrawable rightComplicationDrawable =
+                mComplicationDrawableSparseArray.get(RIGHT_COMPLICATION_ID);
+        rightComplicationDrawable.setBounds(rightBounds);
     }
 
     private void updateWatchHandStyle() {
@@ -398,6 +567,21 @@ public class MyWatchFace extends DecompositionWatchFaceService {
     private boolean mBurnInProtection;
 
 
+    /* Maps active complication ids to the data for that complication. Note: Data will only be
+     * present if the user has chosen a provider via the settings activity for the watch face.
+     */
+    private SparseArray<ComplicationData> mActiveComplicationDataSparseArray;
+
+    /* Maps complication ids to corresponding ComplicationDrawable that renders the
+     * the complication data on the watch face.
+     */
+    private SparseArray<ComplicationDrawable> mComplicationDrawableSparseArray;
+
+    // Used to pull user's preferences for background color, highlight color, and visual
+    // indicating there are unread notifications.
+    SharedPreferences mSharedPref;
+
+
     private class Engine extends DecompositionWatchFaceService.Engine {
         /* Handler to update the time once a second in interactive mode. */
         private final Handler mUpdateTimeHandler = new EngineHandler(this);
@@ -417,6 +601,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             setWatchFaceStyle(new WatchFaceStyle.Builder(MyWatchFace.this)
                     .setAcceptsTapEvents(true)
                     .build());
+            setActiveComplications(COMPLICATION_IDS);
 
         }
 
@@ -431,6 +616,37 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             super.onPropertiesChanged(properties);
             mLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
             mBurnInProtection = properties.getBoolean(PROPERTY_BURN_IN_PROTECTION, false);
+
+
+            // Updates complications to properly render in ambient mode based on the
+            // screen's capabilities.
+            ComplicationDrawable complicationDrawable;
+
+            for (int complicationId : COMPLICATION_IDS) {
+                complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
+
+                complicationDrawable.setLowBitAmbient(mLowBitAmbient);
+                complicationDrawable.setBurnInProtection(mBurnInProtection);
+            }
+        }
+
+
+        /*
+         * Called when there is updated data for a complication id.
+         */
+        @Override
+        public void onComplicationDataUpdate(
+                int complicationId, ComplicationData complicationData) {
+
+            // Adds/updates active complication data in the array.
+            mActiveComplicationDataSparseArray.put(complicationId, complicationData);
+
+            // Updates correct ComplicationDrawable with updated data.
+            ComplicationDrawable complicationDrawable =
+                    mComplicationDrawableSparseArray.get(complicationId);
+            complicationDrawable.setComplicationData(complicationData);
+
+            invalidate();
         }
 
         @Override
@@ -445,6 +661,16 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             mAmbient = inAmbientMode;
 
             updateWatchHandStyle();
+
+            // Update drawable complications' ambient state.
+            // Note: ComplicationDrawable handles switching between active/ambient colors, we just
+            // have to inform it to enter ambient mode.
+            ComplicationDrawable complicationDrawable;
+
+            for (int complicationId : COMPLICATION_IDS) {
+                complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
+                complicationDrawable.setInAmbientMode(mAmbient);
+            }
 
             /* Check and trigger whether or not timer should be running (only in active mode). */
             updateTimer();
@@ -512,20 +738,24 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         @Override
         public void onTapCommand(int tapType, int x, int y, long eventTime) {
             switch (tapType) {
-                case TAP_TYPE_TOUCH:
-                    // The user has started touching the screen.
-                    break;
-                case TAP_TYPE_TOUCH_CANCEL:
-                    // The user has started a different gesture or otherwise cancelled the tap.
-                    break;
                 case TAP_TYPE_TAP:
-                    // The user has completed the tap gesture.
-                    // TODO: Add code to handle the tap gesture.
-                    Toast.makeText(getApplicationContext(), R.string.message, Toast.LENGTH_SHORT)
-                            .show();
+
+                    // If your background complication is the first item in your array, you need
+                    // to walk backward through the array to make sure the tap isn't for a
+                    // complication above the background complication.
+                    for (int i = COMPLICATION_IDS.length - 1; i >= 0; i--) {
+                        int complicationId = COMPLICATION_IDS[i];
+                        ComplicationDrawable complicationDrawable =
+                                mComplicationDrawableSparseArray.get(complicationId);
+
+                        boolean successfulTap = complicationDrawable.onTap(x, y);
+
+                        if (successfulTap) {
+                            return;
+                        }
+                    }
                     break;
             }
-            invalidate();
         }
 
         @Override
@@ -534,6 +764,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             mCalendar.setTimeInMillis(now);
 
             drawBackground(canvas);
+            drawComplications(canvas, now);
             drawWatchFace(canvas);
         }
 
@@ -545,6 +776,18 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 canvas.drawBitmap(mGrayBackgroundBitmap, 0, 0, mBackgroundPaint);
             } else {
                 canvas.drawBitmap(mBackgroundBitmap, 0, 0, mBackgroundPaint);
+            }
+        }
+
+        private void drawComplications(Canvas canvas, long currentTimeMillis) {
+            int complicationId;
+            ComplicationDrawable complicationDrawable;
+
+            for (int id : COMPLICATION_IDS) {
+                complicationId = id;
+                complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
+
+                complicationDrawable.draw(canvas, currentTimeMillis);
             }
         }
 
@@ -630,6 +873,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             super.onVisibilityChanged(visible);
 
             if (visible) {
+                setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
+
                 registerReceiver();
                 /* Update time zone in case it changed while we weren't visible. */
                 mCalendar.setTimeZone(TimeZone.getDefault());
