@@ -78,8 +78,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
     // Unique IDs for each complication. The settings activity that supports allowing users
     // to select their complication data provider requires numbers to be >= 0.
-    private static final int LEFT_COMPLICATION_ID = 100;
-    private static final int RIGHT_COMPLICATION_ID = 101;
+    public static final int LEFT_COMPLICATION_ID = 100;
+    public static final int RIGHT_COMPLICATION_ID = 101;
 
     // Background, Left and right complication IDs as array for Complication API.
     private static final int[] COMPLICATION_IDS = {LEFT_COMPLICATION_ID, RIGHT_COMPLICATION_ID};
@@ -327,6 +327,19 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setHighestValue(2L)
                 .build();
 
+        font = Icon.createWithResource(getApplicationContext(), R.drawable.days_8);
+        FontComponent daysFontComponent = new FontComponent.Builder()
+                .setImage(font)
+                .setComponentId(12)
+                .setDigitCount(7)
+                .build();
+        NumberComponent dayComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_WEEK)
+                .setComponentId(13)
+                .setFontComponent(daysFontComponent)
+                .setZOrder(2)
+                .setPosition(new PointF(0.6F, 0.5F))
+                .build();
+
         // Center circle
         Bitmap circleBitmap = Bitmap.createBitmap(
                 (int)CENTER_GAP_AND_CIRCLE_RADIUS * 4,
@@ -386,8 +399,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 bgComponent, hourComponent, minuteComponent, secondComponent, circleComponent)
                 .addImageComponents(colonComponent)
                 .addComplicationComponents(cc)
-                .addFontComponents(fontComponent, blockingFontComponent)
-                .addNumberComponents(minuteDigit, hourDigit, blockingDigit)
+                .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent)
+                .addNumberComponents(minuteDigit, hourDigit, blockingDigit, dayComponent)
                 .build();
     }
 
@@ -713,7 +726,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 m1.setAccessible(true);
                 WatchFaceDecomposition decomposition = MyWatchFace.this.buildDecomposition();
                 Drawable.Callback drawableCallback = (Drawable.Callback) f3.get(this);
-                DecompositionDrawable dd = new CustomDecompositionDrawable(getApplicationContext());
+                DecompositionDrawable dd = new CustomDecompositionDrawable(getApplicationContext(),  mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID));
                 dd.setDecomposition(decomposition, false);
                 dd.setCallback(drawableCallback);
                 f1.set(this, dd);
@@ -873,8 +886,9 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
             super.onDraw(canvas, bounds);
+            long now = System.currentTimeMillis();
+            //drawComplications(canvas, now);
             if (isVisible() && false) {
-                long now = System.currentTimeMillis();
                 mCalendar.setTimeInMillis(now);
 
                 drawBackground(canvas);
