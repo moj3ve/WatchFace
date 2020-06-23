@@ -26,11 +26,11 @@ public class CustomDecompositionDrawable extends DecompositionDrawable {
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
-        try {
+        try {/*
             Field f = DecompositionDrawable.class.getDeclaredField("complicationDrawables");
             f.setAccessible(true);
             ComplicationDrawable c = ((SparseArray<ComplicationDrawable>)f.get(this)).get(LEFT_COMPLICATION_ID);
-            c.draw(canvas, System.currentTimeMillis());
+            c.draw(canvas, System.currentTimeMillis());*/
             //mCd.draw(canvas, System.currentTimeMillis());
         } catch (Exception e) {
             e.printStackTrace();

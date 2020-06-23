@@ -102,6 +102,13 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             }
     };
 
+    // Left and right dial supported types.
+    private static final int[][] COMPLICATION_SUPPORTED_TYPES_2 = {
+            {
+                    ComplicationData.TYPE_LONG_TEXT
+            }
+    };
+
     // Used by {@link AnalogComplicationConfigRecyclerViewAdapter} to check if complication location
     // is supported in settings config activity.
     public static int getComplicationId(
@@ -315,16 +322,17 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         FontComponent blockingFontComponent = new FontComponent.Builder()
                 .setImage(blockingFont)
                 .setComponentId(10)
-                .setDigitCount(3)
+                .setDigitCount(4)
                 .build();
         NumberComponent blockingDigit = new NumberComponent.Builder(NumberComponent.Builder.HOURS_12)
                 .setComponentId(11)
                 .setFontComponent(blockingFontComponent)
-                .setMsPerIncrement(3 * TimeUnit.HOURS.toMillis(1L))
+                .setMsPerIncrement(TimeUnit.HOURS.toMillis(3L))
+                .setTimeOffsetMs(TimeUnit.HOURS.toMillis(2L))
                 .setZOrder(3)
                 .setPosition(new PointF(hourStartX / dm.widthPixels, clockStartY / dm.widthPixels))
                 .setLowestValue(0L)
-                .setHighestValue(2L)
+                .setHighestValue(3L)
                 .build();
 
         font = Icon.createWithResource(getApplicationContext(), R.drawable.days_8);
@@ -338,6 +346,13 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setFontComponent(daysFontComponent)
                 .setZOrder(2)
                 .setPosition(new PointF(0.6F, 0.5F))
+                .build();
+
+        NumberComponent dateComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_MONTH)
+                .setComponentId(14)
+                .setFontComponent(fontComponent)
+                .setZOrder(2)
+                .setPosition(new PointF(0.6F, 0.4F))
                 .build();
 
         // Center circle
@@ -374,18 +389,20 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         // Complication
         xOffset = circleBitmap.getWidth() / (ambientWidth * 2f);
         yOffset = circleBitmap.getHeight() / (ambientHeight * 2f);
+        xOffset = 0.2f;
+        yOffset = -0.2f;
         offset = new RectF(
-                mLeftComplicationBounds.left / (float)(dm.widthPixels),
-                mLeftComplicationBounds.top / (float)(dm.heightPixels),
-                mLeftComplicationBounds.right / (float)(dm.widthPixels),
-                mLeftComplicationBounds.bottom / (float)(dm.heightPixels));
+                mLeftComplicationBounds.left / (float)(dm.widthPixels) + xOffset - 0.4f,
+                mLeftComplicationBounds.top / (float)(dm.heightPixels) + yOffset - 0.2f,
+                mLeftComplicationBounds.right / (float)(dm.widthPixels) + xOffset + 0.4f,
+                mLeftComplicationBounds.bottom / (float)(dm.heightPixels) + yOffset + 0.2f);
         ComplicationDrawable cd = mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID);
         ComplicationComponent cc = new ComplicationComponent.Builder()
                 .setWatchFaceComplicationId(LEFT_COMPLICATION_ID)
                 .setComplicationDrawable(cd)
                 .setComponentId(5)
                 .setZOrder(1)
-                .setComplicationTypes(COMPLICATION_SUPPORTED_TYPES[0])
+                .setComplicationTypes(COMPLICATION_SUPPORTED_TYPES_2[0])
                 .setBounds(offset)
                 .build();
 
@@ -400,7 +417,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .addImageComponents(colonComponent)
                 .addComplicationComponents(cc)
                 .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent)
-                .addNumberComponents(minuteDigit, hourDigit, blockingDigit, dayComponent)
+                .addNumberComponents(minuteDigit, hourDigit, blockingDigit, dayComponent, dateComponent)
                 .build();
     }
 
@@ -453,6 +470,20 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         // and background, but you could add many more.
         ComplicationDrawable leftComplicationDrawable =
                 new ComplicationDrawable(getApplicationContext());
+        leftComplicationDrawable.setBorderColorAmbient(Color.RED);
+        leftComplicationDrawable.setBorderColorActive(Color.RED);
+        leftComplicationDrawable.setBorderRadiusAmbient(20);
+        leftComplicationDrawable.setHighlightColorAmbient(Color.RED);
+        leftComplicationDrawable.setTextColorAmbient(Color.RED);
+        leftComplicationDrawable.setBackgroundColorAmbient(Color.RED);
+        leftComplicationDrawable.setTitleColorAmbient(Color.RED);
+        leftComplicationDrawable.setIconColorAmbient(Color.RED);
+        leftComplicationDrawable.setTextTypefaceAmbient(getResources().getFont(R.font.rounded_semibold));
+        leftComplicationDrawable.setTextTypefaceActive(getResources().getFont(R.font.rounded_semibold));
+        leftComplicationDrawable.setTitleSizeActive(20);
+        leftComplicationDrawable.setTitleSizeAmbient(20);
+        leftComplicationDrawable.setBorderStyleActive(ComplicationDrawable.BORDER_STYLE_NONE);
+        leftComplicationDrawable.setBorderStyleAmbient(ComplicationDrawable.BORDER_STYLE_NONE);
 
         ComplicationDrawable rightComplicationDrawable =
                 new ComplicationDrawable(getApplicationContext());
@@ -464,7 +495,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         mComplicationDrawableSparseArray.put(LEFT_COMPLICATION_ID, leftComplicationDrawable);
         mComplicationDrawableSparseArray.put(RIGHT_COMPLICATION_ID, rightComplicationDrawable);
 
-        setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
+        //setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
     }
 
 
@@ -575,17 +606,21 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         // For most Wear devices, width and height are the same, so we just chose one (width).
         int sizeOfComplication = dm.widthPixels / 4;
         int midpointOfScreen = dm.widthPixels / 2;
+        int complicationHeight = dm.widthPixels / 4;
+        int complicationWidth = dm.widthPixels * 2/3;
 
         int horizontalOffset = (midpointOfScreen - sizeOfComplication) / 2;
         int verticalOffset = midpointOfScreen - (sizeOfComplication / 2);
+        horizontalOffset = (midpointOfScreen - complicationHeight) / 2;
+        verticalOffset = midpointOfScreen - (complicationWidth / 2);
 
         mLeftComplicationBounds =
                 // Left, Top, Right, Bottom
                 new Rect(
                         horizontalOffset,
                         verticalOffset,
-                        (horizontalOffset + sizeOfComplication),
-                        (verticalOffset + sizeOfComplication));
+                        (horizontalOffset + complicationWidth),
+                        (verticalOffset + complicationHeight));
 
         ComplicationDrawable leftComplicationDrawable =
                 mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID);
@@ -885,9 +920,9 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
-            super.onDraw(canvas, bounds);
             long now = System.currentTimeMillis();
-            //drawComplications(canvas, now);
+            super.onDraw(canvas, bounds);
+            drawComplications(canvas, now);
             if (isVisible() && false) {
                 mCalendar.setTimeInMillis(now);
 
@@ -1007,7 +1042,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             System.out.println("onVisibilityChanged: " + visible);
 
             if (visible) {
-                setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
+                //setComplicationsActiveAndAmbientColors(mWatchHandHighlightColor);
 
                 registerReceiver();
                 /* Update time zone in case it changed while we weren't visible. */
