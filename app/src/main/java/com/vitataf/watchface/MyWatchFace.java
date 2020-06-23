@@ -392,10 +392,10 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         xOffset = 0.2f;
         yOffset = -0.2f;
         offset = new RectF(
-                mLeftComplicationBounds.left / (float)(dm.widthPixels) + xOffset - 0.4f,
-                mLeftComplicationBounds.top / (float)(dm.heightPixels) + yOffset - 0.2f,
-                mLeftComplicationBounds.right / (float)(dm.widthPixels) + xOffset + 0.4f,
-                mLeftComplicationBounds.bottom / (float)(dm.heightPixels) + yOffset + 0.2f);
+                mLeftComplicationBounds.left / (float)(dm.widthPixels),
+                mLeftComplicationBounds.top / (float)(dm.heightPixels),
+                mLeftComplicationBounds.right / (float)(dm.widthPixels),
+                mLeftComplicationBounds.bottom / (float)(dm.heightPixels));
         ComplicationDrawable cd = mComplicationDrawableSparseArray.get(LEFT_COMPLICATION_ID);
         ComplicationComponent cc = new ComplicationComponent.Builder()
                 .setWatchFaceComplicationId(LEFT_COMPLICATION_ID)
@@ -469,7 +469,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         // complication on the watch face. In this watch face, we create one for left, right,
         // and background, but you could add many more.
         ComplicationDrawable leftComplicationDrawable =
-                new ComplicationDrawable(getApplicationContext());
+                new ComplicationDrawable(getApplicationContext());/*
         leftComplicationDrawable.setBorderColorAmbient(Color.RED);
         leftComplicationDrawable.setBorderColorActive(Color.RED);
         leftComplicationDrawable.setBorderRadiusAmbient(20);
@@ -483,7 +483,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         leftComplicationDrawable.setTitleSizeActive(20);
         leftComplicationDrawable.setTitleSizeAmbient(20);
         leftComplicationDrawable.setBorderStyleActive(ComplicationDrawable.BORDER_STYLE_NONE);
-        leftComplicationDrawable.setBorderStyleAmbient(ComplicationDrawable.BORDER_STYLE_NONE);
+        leftComplicationDrawable.setBorderStyleAmbient(ComplicationDrawable.BORDER_STYLE_NONE);*/
 
         ComplicationDrawable rightComplicationDrawable =
                 new ComplicationDrawable(getApplicationContext());
@@ -804,6 +804,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             // Updates correct ComplicationDrawable with updated data.
             ComplicationDrawable complicationDrawable =
                     mComplicationDrawableSparseArray.get(complicationId);
+            System.out.println("complicationDrawable.getType(): " + complicationData.getType());
             complicationDrawable.setComplicationData(complicationData);
 
             invalidate();
