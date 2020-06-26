@@ -18,6 +18,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.RotateDrawable;
 import android.media.Image;
 import android.os.Bundle;
 import android.os.Handler;
@@ -28,6 +29,7 @@ import androidx.palette.graphics.Palette;
 import android.os.Parcel;
 import android.os.PowerManager;
 import android.support.wearable.complications.ComplicationData;
+import android.support.wearable.complications.ComplicationText;
 import android.support.wearable.complications.rendering.ComplicationDrawable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
@@ -41,12 +43,14 @@ import android.support.wearable.watchface.decompositionface.DecompositionDrawabl
 import android.support.wearable.watchface.decompositionface.DecompositionWatchFaceService;
 import android.util.DisplayMetrics;
 import android.util.SparseArray;
+import android.view.Display;
 import android.view.SurfaceHolder;
 import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -89,14 +93,14 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             {
                     ComplicationData.TYPE_RANGED_VALUE,
                     ComplicationData.TYPE_ICON,
-                    ComplicationData.TYPE_SHORT_TEXT,
+                    //ComplicationData.TYPE_SHORT_TEXT,
                     ComplicationData.TYPE_SMALL_IMAGE,
                     ComplicationData.TYPE_LONG_TEXT
             },
             {
                     ComplicationData.TYPE_RANGED_VALUE,
                     ComplicationData.TYPE_ICON,
-                    ComplicationData.TYPE_SHORT_TEXT,
+                    //ComplicationData.TYPE_SHORT_TEXT,
                     ComplicationData.TYPE_SMALL_IMAGE,
                     ComplicationData.TYPE_LONG_TEXT
             }
@@ -145,6 +149,141 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         return COMPLICATION_IDS;
     }
 
+    private WeakReference<int[]> colorTable = new WeakReference<>(null);
+
+    // Should only be used in initialization methods
+    // Crudely convert ARGB_8888 to ARGB_1332 color space
+    private Bitmap get332Bitmap(Bitmap src, boolean transparent) {
+        if (colorTable.get() == null)
+            colorTable = new WeakReference<>(rgb888To332());
+        int[] table = colorTable.get();
+        Bitmap bm = src.copy(Bitmap.Config.ARGB_8888, true);
+        for (int i = 0; i < src.getWidth(); i++) {
+            for (int j = 0; j < src.getHeight(); j++) {
+                int color = src.getPixel(i,j);
+                int blue = (color >> 6) & 0x3;
+                int green = (color >> 13) & 0x7;
+                int red = (color >> 21) & 0x7;
+                int alpha = color >>> 31;
+                int bgr = (red << 5) | (green << 2) | blue;
+                if (!transparent)
+                    bgr |= alpha << 8;
+                color = table[bgr];
+                bm.setPixel(i,j,color);
+            }
+        }
+        return bm;
+    }
+
+    private Bitmap get332Bitmap(Bitmap src) {
+        return get332Bitmap(src, false);
+    }
+
+    private int[] rgb888To332() {
+        System.out.println("Running rgb888To332");
+        int[] map = new int[512];
+        for (int i = 0; i < 512; i++) {
+            int blue = i & 0x3;
+            double prop = blue / 3f;
+            map[i] |= (int)Math.round(255 * prop);
+
+            int green = (i >> 2) & 0x7;
+            prop = green / 7f;
+            map[i] |= (int)Math.round(255 * prop) << 8;
+
+            int red = (i >> 5) & 0x7;
+            prop = red / 7f;
+            map[i] |= (int)Math.round(255 * prop) << 16;
+
+            int alpha = i >> 8;
+            map[i] |= 0xFF000000 * alpha;
+        }
+        return map;
+    }
+
+    private Icon getTicksIcon(DisplayMetrics dm) {
+        int tickLength = 10;
+        int radiusOffset = 10;
+
+        int w = dm.widthPixels;
+        Bitmap bitmap = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.BLACK);
+//        canvas.drawColor(Color.argb(255, 90, 229, 229));
+
+        Paint tickPaint = new Paint();
+        tickPaint.setStrokeWidth(5);
+        tickPaint.setAntiAlias(true);
+        tickPaint.setStyle(Paint.Style.STROKE);
+        tickPaint.setStrokeCap(Paint.Cap.ROUND);
+
+        int outerRadius = w / 2 - radiusOffset;
+        int innerRadius = outerRadius - tickLength;
+        for (int i = 60; i --> 0;) {
+            float angle = i * (float)Math.PI / 30;
+            float innerX = (float)Math.sin(angle) * innerRadius;
+            float innerY = (float)-Math.cos(angle) * innerRadius;
+            float outerX = (float)Math.sin(angle) * outerRadius;
+            float outerY = (float)-Math.cos(angle) * outerRadius;
+            if (i % 5 == 0)
+                tickPaint.setColor(Color.WHITE);
+            else
+                tickPaint.setColor(Color.GRAY);
+            canvas.drawLine(w / 2f + innerX, w / 2f + innerY, w / 2f + outerX,
+                    w / 2f + outerY, tickPaint);
+        }
+
+        return Icon.createWithBitmap(get332Bitmap(bitmap, false));
+    }
+
+    private ImageComponent getSecondHandComponent(DisplayMetrics dm) {
+        int centerDia = 6;
+        int strokeWidth = 3;
+
+
+        int w = dm.widthPixels;
+
+        // Second hand
+        int secondHeight = (w - centerDia) / 2;
+        Bitmap secondBitmap = Bitmap.createBitmap(
+                centerDia, secondHeight + centerDia, Bitmap.Config.ARGB_8888);
+        //secondBitmap = Bitmap.createBitmap(dm.widthPixels, dm.widthPixels, Bitmap.Config.ARGB_8888);
+
+        Paint secondPaint = new Paint();
+        secondPaint.setStrokeWidth(strokeWidth);
+        secondPaint.setAntiAlias(true);
+        secondPaint.setStrokeCap(Paint.Cap.ROUND);
+        secondPaint.setColor(Color.RED);
+        secondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+
+        Canvas canvas = new Canvas(secondBitmap);
+        {
+            canvas.drawLine(
+                    canvas.getWidth() / 2f,
+                    canvas.getHeight() / 2f,
+                    canvas.getWidth() / 2f,
+                    canvas.getHeight(), secondPaint);
+        }
+
+        float xOffset = (secondBitmap.getWidth() / 2f) / dm.widthPixels;
+        float yOffset = (float)secondBitmap.getHeight() / dm.heightPixels;
+        RectF offset = new RectF(
+                0.5f - xOffset,
+                0.5f - yOffset,
+                0.5f + xOffset,
+                0.5f + yOffset);
+
+        return new ImageComponent.Builder(
+                ImageComponent.Builder.TICKING_SECOND_HAND)
+                .setComponentId(3)
+                .setZOrder(6)
+                .setImage(Icon.createWithBitmap(get332Bitmap(secondBitmap)))
+                .setBounds(offset)
+                .setPivot(new PointF(0.5f, 0.5f)
+                        /*new PointF(secondBitmap.getWidth() / 2f / dm.widthPixels, secondBitmap.getHeight() / (float)dm.widthPixels)*/)
+                .build();
+    }
+
     @Override
     protected WatchFaceDecomposition buildDecomposition() {
         DisplayMetrics dm = getApplication().getResources().getDisplayMetrics();
@@ -158,7 +297,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         // Background
         Bitmap bgBitmap = Bitmap.createBitmap(ambientWidth, ambientHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bgBitmap);
-        canvas.drawColor(Color.BLACK);
+        canvas.drawColor(Color.argb(255, 229, 229, 229));
         {
             Paint paint = new Paint(mTickAndCirclePaint);
             paint.setAntiAlias(false);
@@ -181,7 +320,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         ImageComponent bgComponent = new ImageComponent.Builder()
                 .setComponentId(0)
                 .setZOrder(0)
-                .setImage(bgIcon)
+                .setImage(getTicksIcon(dm))
                 .build();
 
         // Hour hand
@@ -191,8 +330,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         canvas = new Canvas(hourBitmap);
         {
             Paint paint = new Paint(mHourPaint);
-            paint.setAntiAlias(false);
-            paint.clearShadowLayer();
+            paint.setAntiAlias(true);
+            //paint.clearShadowLayer();
             canvas.drawLine(
                     canvas.getWidth() / 2f,
                     0f,
@@ -209,8 +348,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 0.5f + yOffset);
         ImageComponent hourComponent = new ImageComponent.Builder(ImageComponent.Builder.HOUR_HAND)
                 .setComponentId(1)
-                .setZOrder(1)
-                .setImage(Icon.createWithBitmap(hourBitmap))
+                .setZOrder(3)
+                .setImage(Icon.createWithBitmap(get332Bitmap(hourBitmap, true)))
                 .setBounds(offset)
                 .build();
 
@@ -221,8 +360,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         canvas = new Canvas(minuteBitmap);
         {
             Paint paint = new Paint(mMinutePaint);
-            paint.setAntiAlias(false);
-            paint.clearShadowLayer();
+            paint.setAntiAlias(true);
+            //paint.clearShadowLayer();
             canvas.drawLine(
                     canvas.getWidth() / 2f,
                     0f,
@@ -240,43 +379,13 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         ImageComponent minuteComponent = new ImageComponent.Builder(
                 ImageComponent.Builder.MINUTE_HAND)
                 .setComponentId(2)
-                .setZOrder(2)
-                .setImage(Icon.createWithBitmap(minuteBitmap))
-                .setBounds(offset)
-                .build();
-
-        // Second hand
-        int secondHeight = (int)(CENTER_GAP_AND_CIRCLE_RADIUS + mSecondHandLength);
-        Bitmap secondBitmap = Bitmap.createBitmap(
-                (int)CENTER_GAP_AND_CIRCLE_RADIUS, secondHeight, Bitmap.Config.ARGB_8888);
-        canvas = new Canvas(secondBitmap);
-        {
-            Paint paint = new Paint(mSecondPaint);
-//            paint.setAntiAlias(false);
-            paint.clearShadowLayer();
-            canvas.drawLine(
-                    canvas.getWidth() / 2f,
-                    0f,
-                    canvas.getWidth() / 2f,
-                    canvas.getHeight(),
-                    paint);
-        }
-        xOffset = (secondBitmap.getWidth() / 2f) / ambientWidth;
-        yOffset = (float)secondBitmap.getHeight() / ambientHeight;
-        offset = new RectF(
-                0.5f - xOffset,
-                0.5f - yOffset,
-                0.5f + xOffset,
-                0.5f + yOffset);
-        ImageComponent secondComponent = new ImageComponent.Builder(
-                ImageComponent.Builder.TICKING_SECOND_HAND)
-                .setComponentId(3)
                 .setZOrder(3)
-                .setImage(Icon.createWithBitmap(secondBitmap))
+                .setImage(Icon.createWithBitmap(get332Bitmap(minuteBitmap, false)))
                 .setBounds(offset)
                 .build();
 
-        Icon font = Icon.createWithResource(getApplicationContext(), R.drawable.rounded_semibold_8);
+        Bitmap bm = BitmapFactory.decodeResource(getResources(), R.drawable.rounded_semibold);
+        Icon font = Icon.createWithBitmap(get332Bitmap(bm, true));
         FontComponent fontComponent = new FontComponent.Builder()
                 .setImage(font)
                 .setComponentId(6)
@@ -294,7 +403,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setPosition(new PointF(minuteStartX / dm.widthPixels, clockStartY / dm.widthPixels))
                 .build();
 
-        Icon colon = Icon.createWithResource(getApplicationContext(), R.drawable.colon_8);
+        bm = BitmapFactory.decodeResource(getResources(), R.drawable.colon_8);
+        Icon colon = Icon.createWithBitmap(get332Bitmap(bm));
         int colonWidth = colon.loadDrawable(getApplicationContext()).getMinimumWidth();
         float leftColonStartX = minuteStartX - colonWidth;
         RectF leftColonBounds = new RectF(
@@ -313,12 +423,13 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         NumberComponent hourDigit = new NumberComponent.Builder(NumberComponent.Builder.HOURS_12)
                 .setComponentId(9)
                 .setFontComponent(fontComponent)
-                .setZOrder(2)
+                .setZOrder(1)
                 .setPosition(new PointF(hourStartX / dm.widthPixels, clockStartY / dm.widthPixels))
                 .setMinDigitsShown(2)
                 .build();
 
-        Icon blockingFont = Icon.createWithResource(getApplicationContext(), R.drawable.rounded_semibold_short_8);
+        bm = BitmapFactory.decodeResource(getResources(), R.drawable.rounded_semibold_short);
+        Icon blockingFont = Icon.createWithBitmap(get332Bitmap(bm, false));
         FontComponent blockingFontComponent = new FontComponent.Builder()
                 .setImage(blockingFont)
                 .setComponentId(10)
@@ -329,13 +440,14 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setFontComponent(blockingFontComponent)
                 .setMsPerIncrement(TimeUnit.HOURS.toMillis(3L))
                 .setTimeOffsetMs(TimeUnit.HOURS.toMillis(2L))
-                .setZOrder(3)
+                .setZOrder(2)
                 .setPosition(new PointF(hourStartX / dm.widthPixels, clockStartY / dm.widthPixels))
                 .setLowestValue(0L)
                 .setHighestValue(3L)
                 .build();
 
-        font = Icon.createWithResource(getApplicationContext(), R.drawable.days_8);
+        bm = BitmapFactory.decodeResource(getResources(), R.drawable.days);
+        font = Icon.createWithBitmap(get332Bitmap(bm, true));
         FontComponent daysFontComponent = new FontComponent.Builder()
                 .setImage(font)
                 .setComponentId(12)
@@ -344,14 +456,14 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         NumberComponent dayComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_WEEK)
                 .setComponentId(13)
                 .setFontComponent(daysFontComponent)
-                .setZOrder(2)
+                .setZOrder(1)
                 .setPosition(new PointF(0.6F, 0.5F))
                 .build();
 
         NumberComponent dateComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_MONTH)
                 .setComponentId(14)
                 .setFontComponent(fontComponent)
-                .setZOrder(2)
+                .setZOrder(1)
                 .setPosition(new PointF(0.6F, 0.4F))
                 .build();
 
@@ -406,14 +518,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setBounds(offset)
                 .build();
 
-
-
-        System.out.println("cd.getBounds():  " + cc.getBounds());
-        System.out.println("offset: " + offset);
-
-
         return new WatchFaceDecomposition.Builder().addImageComponents(
-                bgComponent, hourComponent, minuteComponent, secondComponent, circleComponent)
+                bgComponent, hourComponent, minuteComponent, getSecondHandComponent(dm)/*, circleComponent*/)
                 .addImageComponents(colonComponent)
                 .addComplicationComponents(cc)
                 .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent)
@@ -739,11 +845,11 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         @Override
         public void onCreate(SurfaceHolder holder) {
-            //super.onCreate(holder);
+            super.onCreate(holder);
 
             setWatchFaceStyle(new WatchFaceStyle.Builder(MyWatchFace.this)
                     .setAcceptsTapEvents(true)
-                    .build());
+                    .build());/*
             @SuppressLint({"InvalidWakeLockTag", "WrongConstant"}) PowerManager.WakeLock ambientUpdateWakelock = ((PowerManager)MyWatchFace.this.getSystemService("power")).newWakeLock(1, "WatchFaceService[AmbientUpdate]");
             try {
                 Field f = WatchFaceService.Engine.class.getDeclaredField("mAmbientUpdateWakelock");
@@ -774,7 +880,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             }
 
 
-            updateDecompositionDrawable();
+            updateDecompositionDrawable();*/
         }
 
         @Override
@@ -797,6 +903,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         @Override
         public void onComplicationDataUpdate(
                 int complicationId, ComplicationData complicationData) {
+            super.onComplicationDataUpdate(complicationId, complicationData);/*
 
             // Adds/updates active complication data in the array.
             mActiveComplicationDataSparseArray.put(complicationId, complicationData);
@@ -804,10 +911,24 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             // Updates correct ComplicationDrawable with updated data.
             ComplicationDrawable complicationDrawable =
                     mComplicationDrawableSparseArray.get(complicationId);
-            System.out.println("complicationDrawable.getType(): " + complicationData.getType());
+            System.out.println("complicationData.getType(): " + complicationData.getType());
+            if (complicationData.getLongTitle() != null) {
+                System.out.println("complicationData.getLongTitle(): " + complicationData.getLongTitle().getText(getApplicationContext(), System.currentTimeMillis()));
+                try {
+                    Field f = ComplicationData.class.getDeclaredField("mFields");
+                    f.setAccessible(true);
+                    Bundle b = (Bundle)f.get(complicationData);
+                    ComplicationText ct = new ComplicationText.TimeDifferenceBuilder().setSurroundingText("Lol").build();
+                    b.putParcelable("LONG_TITLE", ct);
+                } catch (Exception ignored) {
+
+                }
+            }
+            if (complicationData.getShortText() != null)
+                System.out.println("complicationData.getLongText(): " + complicationData.getLongText().getText(getApplicationContext(), System.currentTimeMillis()));
             complicationDrawable.setComplicationData(complicationData);
 
-            invalidate();
+            invalidate();*/
         }
 
         @Override
@@ -818,7 +939,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         @Override
         public void onAmbientModeChanged(boolean inAmbientMode) {
-            super.onAmbientModeChanged(inAmbientMode);
+            super.onAmbientModeChanged(inAmbientMode);/*
             mAmbient = inAmbientMode;
 
             updateWatchHandStyle();
@@ -831,7 +952,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
             for (int complicationId : COMPLICATION_IDS) {
                 complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
                 complicationDrawable.setInAmbientMode(mAmbient);
-            }
+            }*/
 
             /* Check and trigger whether or not timer should be running (only in active mode). */
             updateTimer();
@@ -898,6 +1019,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
          */
         @Override
         public void onTapCommand(int tapType, int x, int y, long eventTime) {
+            super.onTapCommand(tapType, x, y, eventTime);/*
             switch (tapType) {
                 case TAP_TYPE_TAP:
 
@@ -916,21 +1038,21 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                         }
                     }
                     break;
-            }
+            }*/
         }
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
-            long now = System.currentTimeMillis();
+//            long now = System.currentTimeMillis();
             super.onDraw(canvas, bounds);
-            drawComplications(canvas, now);
+/*            drawComplications(canvas, now);
             if (isVisible() && false) {
                 mCalendar.setTimeInMillis(now);
 
                 drawBackground(canvas);
                 drawComplications(canvas, now);
                 drawWatchFace(canvas);
-            }
+            }*/
         }
 
         private void drawBackground(Canvas canvas) {
