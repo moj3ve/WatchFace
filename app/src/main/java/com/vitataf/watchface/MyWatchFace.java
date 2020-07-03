@@ -201,18 +201,19 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         return map;
     }
 
-    private Icon getTicksIcon(DisplayMetrics dm) {
+    private ImageComponent getBackgroundComponent(DisplayMetrics dm) {
         int tickLength = 10;
-        int radiusOffset = 10;
+        int radiusOffset = 5;
+        int tickWidth = 5;
 
-        int w = dm.widthPixels;
+        int w = dm.widthPixels - 20;
         Bitmap bitmap = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.BLACK);
 //        canvas.drawColor(Color.argb(255, 90, 229, 229));
 
         Paint tickPaint = new Paint();
-        tickPaint.setStrokeWidth(5);
+        tickPaint.setStrokeWidth(tickWidth);
         tickPaint.setAntiAlias(true);
         tickPaint.setStyle(Paint.Style.STROKE);
         tickPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -233,54 +234,88 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                     w / 2f + outerY, tickPaint);
         }
 
-        return Icon.createWithBitmap(get332Bitmap(bitmap, false));
+        return new ImageComponent.Builder()
+                .setComponentId(0)
+                .setZOrder(0)
+                .setImage(Icon.createWithBitmap(get332Bitmap(bitmap, false)))
+                .setBounds(getOffsetBounds(bitmap, dm, 0.5f, 0.5f))
+                .build();
+    }
+
+    private RectF getCenterBounds(Bitmap bitmap, DisplayMetrics dm) {
+        float width = dm.widthPixels;
+
+        float xOffset = bitmap.getWidth() / 2f / width;
+        float yOffset = bitmap.getHeight() / 2f / width;
+
+        return new RectF(0.5f - xOffset, 0.5f - yOffset, 0.5f + xOffset, 0.5f + yOffset);
+    }
+
+    private RectF getOffsetBounds(Bitmap bitmap, DisplayMetrics dm, float x, float y) {
+        float width = dm.widthPixels;
+
+        float xOffset = (bitmap.getWidth() ) / 2f / width;
+        float yOffset = (bitmap.getHeight() ) / 2f / width;
+
+        return new RectF(x - xOffset, y - yOffset, x + xOffset, y + yOffset);
     }
 
     private ImageComponent getSecondHandComponent(DisplayMetrics dm) {
-        int centerDia = 6;
+        int centerDia = 10;
         int strokeWidth = 3;
+        int tailLength = 20;
 
 
         int w = dm.widthPixels;
 
         // Second hand
-        int secondHeight = (w - centerDia) / 2;
+        int secondHeight = (w - centerDia) / 2 - 5;
         Bitmap secondBitmap = Bitmap.createBitmap(
-                centerDia, secondHeight + centerDia, Bitmap.Config.ARGB_8888);
+                centerDia + strokeWidth,
+                secondHeight + centerDia + tailLength,
+                Bitmap.Config.ARGB_8888);
         //secondBitmap = Bitmap.createBitmap(dm.widthPixels, dm.widthPixels, Bitmap.Config.ARGB_8888);
 
         Paint secondPaint = new Paint();
         secondPaint.setStrokeWidth(strokeWidth);
         secondPaint.setAntiAlias(true);
-        secondPaint.setStrokeCap(Paint.Cap.ROUND);
+//        secondPaint.setStrokeCap(Paint.Cap.ROUND);
         secondPaint.setColor(Color.RED);
-        secondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
+        secondPaint.setStyle(Paint.Style.STROKE);
+//        secondPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, mWatchHandShadowColor);
 
         Canvas canvas = new Canvas(secondBitmap);
-        {
-            canvas.drawLine(
-                    canvas.getWidth() / 2f,
-                    canvas.getHeight() / 2f,
-                    canvas.getWidth() / 2f,
-                    canvas.getHeight(), secondPaint);
-        }
+        canvas.drawLine(
+                canvas.getWidth() / 2f,
+                canvas.getHeight() - tailLength,
+                canvas.getWidth() / 2f,
+                canvas.getHeight(),
+                secondPaint);
+        canvas.drawCircle(
+                canvas.getWidth() / 2f,
+                secondHeight + centerDia / 2f,
+                centerDia / 2f,
+                secondPaint);
+        canvas.drawLine(
+                canvas.getWidth() / 2f,
+                canvas.getHeight() - tailLength - centerDia,
+                canvas.getWidth() / 2f,
+                0,
+                secondPaint);
 
-        float xOffset = (secondBitmap.getWidth() / 2f) / dm.widthPixels;
-        float yOffset = (float)secondBitmap.getHeight() / dm.heightPixels;
-        RectF offset = new RectF(
-                0.5f - xOffset,
-                0.5f - yOffset,
-                0.5f + xOffset,
-                0.5f + yOffset);
+        RectF bounds = new RectF(
+                0.5f - secondBitmap.getWidth() / 2f / w,
+                0.5f - (secondHeight + centerDia / 2f) / w,
+                0.5f + secondBitmap.getWidth() / 2f / w,
+                0.5f + (tailLength + centerDia / 2f) / w);
 
         return new ImageComponent.Builder(
-                ImageComponent.Builder.TICKING_SECOND_HAND)
+                ImageComponent.Builder.BPH_21600_SECOND_HAND)
                 .setComponentId(3)
                 .setZOrder(6)
                 .setImage(Icon.createWithBitmap(get332Bitmap(secondBitmap)))
-                .setBounds(offset)
-                .setPivot(new PointF(0.5f, 0.5f)
-                        /*new PointF(secondBitmap.getWidth() / 2f / dm.widthPixels, secondBitmap.getHeight() / (float)dm.widthPixels)*/)
+                .setBounds(bounds)
+                .setPivot(new PointF(0.5f, 0.5f))
                 .build();
     }
 
@@ -317,11 +352,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         }
         Icon bgIcon = Icon.createWithBitmap(bgBitmap);
-        ImageComponent bgComponent = new ImageComponent.Builder()
-                .setComponentId(0)
-                .setZOrder(0)
-                .setImage(getTicksIcon(dm))
-                .build();
+
 
         // Hour hand
         int hourHeight = (int)(CENTER_GAP_AND_CIRCLE_RADIUS + sHourHandLength);
@@ -392,7 +423,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setDigitCount(10)
                 .build();
         Drawable fontDrawable = font.loadDrawable(getApplicationContext());
-        float minuteStartX = dm.widthPixels / 2f - fontDrawable.getMinimumWidth();
+        float minuteStartX = dm.widthPixels / 2f - fontDrawable.getMinimumWidth() - 50;
         float minuteEndX = dm.widthPixels / 2f + fontDrawable.getMinimumWidth();
         float clockStartY = dm.widthPixels / 2f - fontDrawable.getMinimumHeight() / 2 / 10;
         float clockEndY = dm.widthPixels / 2f + fontDrawable.getMinimumHeight() / 2 / 10;
@@ -404,7 +435,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .build();
 
         bm = BitmapFactory.decodeResource(getResources(), R.drawable.colon_8);
-        Icon colon = Icon.createWithBitmap(get332Bitmap(bm));
+        Icon colon = Icon.createWithBitmap(get332Bitmap(bm, true));
         int colonWidth = colon.loadDrawable(getApplicationContext()).getMinimumWidth();
         float leftColonStartX = minuteStartX - colonWidth;
         RectF leftColonBounds = new RectF(
@@ -447,6 +478,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .build();
 
         bm = BitmapFactory.decodeResource(getResources(), R.drawable.days);
+        yOffset = 0.5f - bm.getHeight() / 7f / 2f / ambientWidth;
+        xOffset = 0.02f;
         font = Icon.createWithBitmap(get332Bitmap(bm, true));
         FontComponent daysFontComponent = new FontComponent.Builder()
                 .setImage(font)
@@ -457,14 +490,14 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setComponentId(13)
                 .setFontComponent(daysFontComponent)
                 .setZOrder(1)
-                .setPosition(new PointF(0.6F, 0.5F))
+                .setPosition(new PointF(0.465F + xOffset, yOffset))
                 .build();
 
         NumberComponent dateComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_MONTH)
                 .setComponentId(14)
                 .setFontComponent(fontComponent)
                 .setZOrder(1)
-                .setPosition(new PointF(0.6F, 0.4F))
+                .setPosition(new PointF(0.75F + xOffset, yOffset))
                 .build();
 
         // Center circle
@@ -519,7 +552,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .build();
 
         return new WatchFaceDecomposition.Builder().addImageComponents(
-                bgComponent, hourComponent, minuteComponent, getSecondHandComponent(dm)/*, circleComponent*/)
+                getBackgroundComponent(dm), getSecondHandComponent(dm)/*, circleComponent*/)
                 .addImageComponents(colonComponent)
                 .addComplicationComponents(cc)
                 .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent)
@@ -591,6 +624,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         leftComplicationDrawable.setBorderStyleActive(ComplicationDrawable.BORDER_STYLE_NONE);
         leftComplicationDrawable.setBorderStyleAmbient(ComplicationDrawable.BORDER_STYLE_NONE);*/
 
+        leftComplicationDrawable.setBorderStyleAmbient(ComplicationDrawable.BORDER_STYLE_NONE);
         ComplicationDrawable rightComplicationDrawable =
                 new ComplicationDrawable(getApplicationContext());
 
