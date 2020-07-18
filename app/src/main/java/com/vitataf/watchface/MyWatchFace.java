@@ -80,6 +80,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
      */
     private static final int MSG_UPDATE_TIME = 0;
 
+    private static final int AMBIENT_OFFSET = 12;
+
     // Unique IDs for each complication. The settings activity that supports allowing users
     // to select their complication data provider requires numbers to be >= 0.
     public static final int LEFT_COMPLICATION_ID = 100;
@@ -153,17 +155,23 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
     // Should only be used in initialization methods
     // Crudely convert ARGB_8888 to ARGB_1332 color space
-    private Bitmap get332Bitmap(Bitmap src, boolean transparent) {
-        if (colorTable.get() == null)
-            colorTable = new WeakReference<>(rgb888To332());
+    private Bitmap get332Bitmap(Bitmap src, boolean transparent, int[] offset) {
         int[] table = colorTable.get();
+        if (table == null)
+            colorTable = new WeakReference<>(table = rgb888To332());
         Bitmap bm = src.copy(Bitmap.Config.ARGB_8888, true);
         for (int i = 0; i < src.getWidth(); i++) {
             for (int j = 0; j < src.getHeight(); j++) {
                 int color = src.getPixel(i,j);
-                int blue = (color >> 6) & 0x3;
-                int green = (color >> 13) & 0x7;
-                int red = (color >> 21) & 0x7;
+                int blue = (color >> 6) & 0x3 + offset[2];
+                if (blue < 0) blue = 0;
+                else if (blue > 3) blue = 3;
+                int green = (color >> 13) & 0x7 + offset[1];
+                if (green < 0) green = 0;
+                else if (green > 7) green = 7;
+                int red = (color >> 21) & 0x7 + offset[0];
+                if (red < 0) red = 0;
+                else if (red > 7) red = 7;
                 int alpha = color >>> 31;
                 int bgr = (red << 5) | (green << 2) | blue;
                 if (!transparent)
@@ -175,8 +183,12 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         return bm;
     }
 
+    private Bitmap get332Bitmap(Bitmap src, boolean transparent) {
+        return get332Bitmap(src, transparent, new int[3]);
+    }
+
     private Bitmap get332Bitmap(Bitmap src) {
-        return get332Bitmap(src, false);
+        return get332Bitmap(src, false, new int[3]);
     }
 
     private int[] rgb888To332() {
@@ -203,14 +215,23 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
     private ImageComponent getBackgroundComponent(DisplayMetrics dm) {
         int tickLength = 10;
-        int radiusOffset = 5;
+        int radiusOffset = 0;
         int tickWidth = 5;
 
-        int w = dm.widthPixels - 20;
+        int w = dm.widthPixels - AMBIENT_OFFSET + 3;
         Bitmap bitmap = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.BLACK);
 //        canvas.drawColor(Color.argb(255, 90, 229, 229));
+
+        Paint boundPaint = new Paint();
+        boundPaint.setStrokeWidth(1);
+        boundPaint.setStyle(Paint.Style.STROKE);
+        boundPaint.setColor(Color.WHITE);
+
+        canvas.drawCircle(w / 2f, w / 2f, w / 2f, boundPaint);
+        canvas.drawLine(0, w / 2f, w, w / 2f, boundPaint);
+        canvas.drawLine(w / 2f, 0, w / 2f, w, boundPaint);
 
         Paint tickPaint = new Paint();
         tickPaint.setStrokeWidth(tickWidth);
@@ -238,7 +259,8 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setComponentId(0)
                 .setZOrder(0)
                 .setImage(Icon.createWithBitmap(get332Bitmap(bitmap, false)))
-                .setBounds(getOffsetBounds(bitmap, dm, 0.5f, 0.5f))
+//                .setImage(Icon.createWithResource(getApplicationContext(), R.drawable.bg))
+                .setBounds(new RectF(0f, 0f, 1f, 1f))
                 .build();
     }
 
@@ -266,10 +288,10 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         int tailLength = 20;
 
 
-        int w = dm.widthPixels;
+        int w = dm.widthPixels - AMBIENT_OFFSET - 2;
 
         // Second hand
-        int secondHeight = (w - centerDia) / 2 - 5;
+        int secondHeight = (w - centerDia) / 2;
         Bitmap secondBitmap = Bitmap.createBitmap(
                 centerDia + strokeWidth,
                 secondHeight + centerDia + tailLength,
@@ -310,7 +332,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 0.5f + (tailLength + centerDia / 2f) / w);
 
         return new ImageComponent.Builder(
-                ImageComponent.Builder.BPH_21600_SECOND_HAND)
+                ImageComponent.Builder.TICKING_SECOND_HAND)
                 .setComponentId(3)
                 .setZOrder(6)
                 .setImage(Icon.createWithBitmap(get332Bitmap(secondBitmap)))
@@ -479,7 +501,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
 
         bm = BitmapFactory.decodeResource(getResources(), R.drawable.days);
         yOffset = 0.5f - bm.getHeight() / 7f / 2f / ambientWidth;
-        xOffset = 0.02f;
+        xOffset = 0.03f;
         font = Icon.createWithBitmap(get332Bitmap(bm, true));
         FontComponent daysFontComponent = new FontComponent.Builder()
                 .setImage(font)
@@ -490,12 +512,19 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 .setComponentId(13)
                 .setFontComponent(daysFontComponent)
                 .setZOrder(1)
-                .setPosition(new PointF(0.465F + xOffset, yOffset))
+                .setPosition(new PointF(0.49F + xOffset, yOffset))
                 .build();
 
-        NumberComponent dateComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_MONTH)
+        bm = BitmapFactory.decodeResource(getResources(), R.drawable.rounded_semibold_38);
+        font = Icon.createWithBitmap(get332Bitmap(bm, true));
+        FontComponent smallFont = new FontComponent.Builder()
+                .setImage(font)
                 .setComponentId(14)
-                .setFontComponent(fontComponent)
+                .setDigitCount(10)
+                .build();
+        NumberComponent dateComponent = new NumberComponent.Builder(NumberComponent.Builder.DAY_OF_MONTH)
+                .setComponentId(15)
+                .setFontComponent(smallFont)
                 .setZOrder(1)
                 .setPosition(new PointF(0.75F + xOffset, yOffset))
                 .build();
@@ -555,7 +584,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
                 getBackgroundComponent(dm), getSecondHandComponent(dm)/*, circleComponent*/)
                 .addImageComponents(colonComponent)
                 .addComplicationComponents(cc)
-                .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent)
+                .addFontComponents(fontComponent, blockingFontComponent, daysFontComponent, smallFont)
                 .addNumberComponents(minuteDigit, hourDigit, blockingDigit, dayComponent, dateComponent)
                 .build();
     }
