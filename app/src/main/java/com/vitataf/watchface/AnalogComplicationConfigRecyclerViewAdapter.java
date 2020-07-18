@@ -19,7 +19,6 @@ package com.vitataf.watchface;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
@@ -35,10 +34,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.Switch;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -80,8 +77,6 @@ public class AnalogComplicationConfigRecyclerViewAdapter
      * complication data types.
      */
     public enum ComplicationLocation {
-        LEFT,
-        RIGHT,
         TOP,
         BOTTOM
     }
@@ -105,7 +100,6 @@ public class AnalogComplicationConfigRecyclerViewAdapter
     // Selected complication id by user.
     private int mSelectedComplicationId;
 
-    private int mBackgroundComplicationId;
     private int mLeftComplicationId;
     private int mRightComplicationId;
 
@@ -129,9 +123,9 @@ public class AnalogComplicationConfigRecyclerViewAdapter
         mSelectedComplicationId = -1;
 
         mLeftComplicationId =
-                MyWatchFace.getComplicationId(ComplicationLocation.LEFT);
+                MyWatchFace.getComplicationId(ComplicationLocation.TOP);
         mRightComplicationId =
-                MyWatchFace.getComplicationId(ComplicationLocation.RIGHT);
+                MyWatchFace.getComplicationId(ComplicationLocation.BOTTOM);
 
         mSharedPref =
                 context.getSharedPreferences(
@@ -281,13 +275,13 @@ public class AnalogComplicationConfigRecyclerViewAdapter
                 Log.d(TAG, "Left Complication click()");
 
                 Activity currentActivity = (Activity) view.getContext();
-                launchComplicationHelperActivity(currentActivity, ComplicationLocation.LEFT);
+                launchComplicationHelperActivity(currentActivity, ComplicationLocation.TOP);
 
             } else if (view.equals(mRightComplication)) {
                 Log.d(TAG, "Right Complication click()");
 
                 Activity currentActivity = (Activity) view.getContext();
-                launchComplicationHelperActivity(currentActivity, ComplicationLocation.RIGHT);
+                launchComplicationHelperActivity(currentActivity, ComplicationLocation.BOTTOM);
             }
         }
 
@@ -376,7 +370,7 @@ public class AnalogComplicationConfigRecyclerViewAdapter
             Log.d(TAG, "updateComplicationViews(): id: " + watchFaceComplicationId);
             Log.d(TAG, "\tinfo: " + complicationProviderInfo);
 
-            if (watchFaceComplicationId == mBackgroundComplicationId) {
+            if (false) {
                 if (complicationProviderInfo != null) {
                     mBackgroundComplicationEnabled = true;
 
