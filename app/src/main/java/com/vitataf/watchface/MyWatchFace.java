@@ -183,6 +183,28 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         return get332Bitmap(src, false, new int[3]);
     }
 
+    // Should only be used in initialization methods
+    // Crudely convert ARGB_8888 to ARGB_1332 color space
+    private Bitmap get332BlueBitmap(Bitmap src, boolean transparent) {
+        Bitmap bm = src.copy(Bitmap.Config.ARGB_8888, true);
+        for (int i = 0; i < src.getWidth(); i++) {
+            for (int j = 0; j < src.getHeight(); j++) {
+                int color = src.getPixel(i,j);
+                int rgb = color & 0x00FFFFFF;
+                if (rgb != 0) {
+                    if (rgb == 0x22a0ff)
+                        rgb = 0x20A0C0;
+                    else
+                        rgb = 0x20A0C0;
+                }
+                if (!transparent)
+                    rgb |= color & 0xF0000000;
+                bm.setPixel(i,j,rgb);
+            }
+        }
+        return bm;
+    }
+
     private int[] rgb888To332() {
         System.out.println("Running rgb888To332");
         int[] map = new int[512];
@@ -407,10 +429,10 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         List<WatchFaceDecomposition.Component> components = new ArrayList<>();
         int w = AMBIENT_DISPLAY_WIDTH;
 
-        Bitmap bm = BitmapFactory.decodeResource(getResources(), R.drawable.days);
+        Bitmap bm = BitmapFactory.decodeResource(getResources(), R.drawable.days_blue);
         float yOffset = 0.5f - bm.getHeight() / 7f / 2f / w;
         float xOffset = 0.03f;
-        Icon font = Icon.createWithBitmap(get332Bitmap(bm, true));
+        Icon font = Icon.createWithBitmap(get332BlueBitmap(bm, true));
         FontComponent daysFontComponent = new FontComponent.Builder()
                 .setImage(font)
                 .setComponentId(getNewComponentId())
@@ -450,7 +472,7 @@ public class MyWatchFace extends DecompositionWatchFaceService {
         List<WatchFaceDecomposition.Component> components = new ArrayList<>();
         float w = AMBIENT_DISPLAY_WIDTH;
         int[] textSize = {23, 22};
-        int[] titleSize = {30, 25};
+        int[] titleSize = {35, 25};
         float[] width = {0.7f, 0.9f};
         float[] top = {50 / w, 220 / w};
         float[] height = {0.25f, 0.25f};
